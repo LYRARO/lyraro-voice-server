@@ -170,9 +170,10 @@ wss.on('connection', (twilioWs, req) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log('=================================');
   console.log('LYRARO Voice Server running on port ' + PORT);
-  console.log('OpenAI API Key configured: ' + (OPENAI_API_KEY ? 'Yes' : 'NO - MISSING!'));
+  console.log('OpenAI API Key configured: ' + (OPENAI_API_KEY ? 'Yes' : 'NO!'));
   console.log('=================================');
 });
+
