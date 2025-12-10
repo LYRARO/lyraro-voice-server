@@ -1,6 +1,6 @@
-import express from 'express';
-import { WebSocketServer, WebSocket } from 'ws';
-import { createServer } from 'http';
+const express = require('express');
+const { WebSocketServer, WebSocket } = require('ws');
+const { createServer } = require('http');
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
@@ -11,20 +11,20 @@ const wss = new WebSocketServer({ server });
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// Health check endpoint
+// Health check
 app.get('/', (req, res) => {
   res.send('LYRARO Voice Server Running');
 });
 
-// Twilio Voice webhook - returns TwiML to connect to WebSocket
+// Twilio Voice webhook - returns TwiML
 app.post('/voice', (req, res) => {
   const systemPrompt = req.query.systemPrompt || '';
   const greeting = req.query.greeting || '';
-  
   const host = req.get('host');
   const wsUrl = `wss://${host}/media-stream?systemPrompt=${encodeURIComponent(systemPrompt)}&greeting=${encodeURIComponent(greeting)}`;
   
-  console.log('Voice webhook called, WebSocket URL:', wsUrl);
+  console.log('Voice webhook called');
+  console.log('WebSocket URL:', wsUrl);
   
   res.type('text/xml');
   res.send(`<?xml version="1.0" encoding="UTF-8"?>
@@ -35,8 +35,8 @@ app.post('/voice', (req, res) => {
 </Response>`);
 });
 
-// WebSocket handler for Twilio Media Stream
-wss.on('connection', async (twilioWs, req) => {
+// WebSocket handler
+wss.on('connection', (twilioWs, req) => {
   console.log('=== NEW TWILIO CONNECTION ===');
   
   const url = new URL(req.url, `wss://${req.headers.host}`);
@@ -49,19 +49,13 @@ wss.on('connection', async (twilioWs, req) => {
   let streamSid = null;
   let openaiWs = null;
   
-  // Connect to OpenAI Realtime API
-  try {
-    openaiWs = new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17', {
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'OpenAI-Beta': 'realtime=v1'
-      }
-    });
-  } catch (error) {
-    console.error('Failed to create OpenAI WebSocket:', error);
-    twilioWs.close();
-    return;
-  }
+  // Connect to OpenAI Realtime
+  openaiWs = new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17', {
+    headers: {
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'OpenAI-Beta': 'realtime=v1'
+    }
+  });
 
   openaiWs.on('open', () => {
     console.log('Connected to OpenAI Realtime');
@@ -71,7 +65,7 @@ wss.on('connection', async (twilioWs, req) => {
       type: 'session.update',
       session: {
         modalities: ['text', 'audio'],
-        instructions: systemPrompt || 'Du bist ein freundlicher Telefonassistent für einen deutschen Handwerksbetrieb.',
+        instructions: systemPrompt || 'Du bist ein freundlicher Telefonassistent fuer einen deutschen Handwerksbetrieb.',
         voice: 'alloy',
         input_audio_format: 'g711_ulaw',
         output_audio_format: 'g711_ulaw',
@@ -85,7 +79,7 @@ wss.on('connection', async (twilioWs, req) => {
       }
     }));
     
-    // Send greeting if provided
+    // Send greeting
     if (greeting) {
       console.log('Sending greeting to OpenAI');
       openaiWs.send(JSON.stringify({
@@ -113,12 +107,9 @@ wss.on('connection', async (twilioWs, req) => {
         }));
       }
       
-      // Log important events
+      // Logging
       if (event.type === 'session.created') {
         console.log('OpenAI session created');
-      }
-      if (event.type === 'session.updated') {
-        console.log('OpenAI session configured');
       }
       if (event.type === 'response.audio_transcript.done') {
         console.log('AI said:', event.transcript);
@@ -138,8 +129,8 @@ wss.on('connection', async (twilioWs, req) => {
     console.error('OpenAI WebSocket error:', error);
   });
 
-  openaiWs.on('close', (code, reason) => {
-    console.log('OpenAI connection closed:', code, reason.toString());
+  openaiWs.on('close', () => {
+    console.log('OpenAI connection closed');
   });
 
   // Handle Twilio messages
@@ -152,7 +143,7 @@ wss.on('connection', async (twilioWs, req) => {
         console.log('Twilio stream started:', streamSid);
       }
       
-      if (data.event === 'media' && openaiWs?.readyState === WebSocket.OPEN) {
+      if (data.event === 'media' && openaiWs && openaiWs.readyState === WebSocket.OPEN) {
         openaiWs.send(JSON.stringify({
           type: 'input_audio_buffer.append',
           audio: data.media.payload
@@ -161,9 +152,7 @@ wss.on('connection', async (twilioWs, req) => {
       
       if (data.event === 'stop') {
         console.log('Twilio stream stopped');
-        if (openaiWs?.readyState === WebSocket.OPEN) {
-          openaiWs.close();
-        }
+        if (openaiWs) openaiWs.close();
       }
     } catch (error) {
       console.error('Error processing Twilio message:', error);
@@ -172,9 +161,7 @@ wss.on('connection', async (twilioWs, req) => {
 
   twilioWs.on('close', () => {
     console.log('Twilio connection closed');
-    if (openaiWs?.readyState === WebSocket.OPEN) {
-      openaiWs.close();
-    }
+    if (openaiWs) openaiWs.close();
   });
 
   twilioWs.on('error', (error) => {
@@ -184,6 +171,8 @@ wss.on('connection', async (twilioWs, req) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`LYRARO Voice Server running on port ${PORT}`);
-  console.log(`OpenAI API Key configured: ${OPENAI_API_KEY ? 'Yes' : 'NO - MISSING!'}`);
+  console.log('=================================');
+  console.log('LYRARO Voice Server running on port ' + PORT);
+  console.log('OpenAI API Key configured: ' + (OPENAI_API_KEY ? 'Yes' : 'NO - MISSING!'));
+  console.log('=================================');
 });
